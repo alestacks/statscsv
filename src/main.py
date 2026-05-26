@@ -5,70 +5,81 @@ import matplotlib.pyplot as plt
 
 from tkinter.filedialog import askopenfilename
 
-country_data = {}
 
-countries_x = []
-countries_y = []
-
-
-def init_country_dict(_name, _year, _data1):
+def init_country_dict(_name, _year, _data1) -> dict:
     return dict(name=_name, year=_year, data1=_data1, data2=None)
 
 
-def fill_data_set(paths: list, year: str):
+def fill_data_set(paths: list, year: str, country_data: dict) -> None:
     for path in paths:
         with open(path, newline="") as csvfile:
             reader = csv.DictReader(csvfile)
             for row in reader:
                 if row["Year"] == year:
                     vlist = list(row.values())
+                    code = vlist[1]
 
-                    if vlist[1] in country_data:
-                        country_data[vlist[1]]["data2"] = vlist[3]
+                    if code in country_data:
+                        country_data[code]["data2"] = vlist[3]
                     else:
-                        country_data[vlist[1]] = init_country_dict(
+                        country_data[code] = init_country_dict(
                             vlist[1], vlist[2], vlist[3]
                         )
 
 
-def fill_x_y():
-    for code in country_data:
-        data = country_data[code]
-        countries_x.append(data["data1"])
-        countries_y.append(data["data2"])
-
-
-def purge_unmatched_pairs():
+def purge_unmatched_pairs(country_data: dict) -> None:
     to_pop = []
 
     for code in country_data:
         if country_data[code]["data2"] == None:
             to_pop.append(code)
+
     for code in to_pop:
         country_data.pop(code)
 
-    fill_x_y()
+
+def build_x_y(country_data: dict) -> tuple[list[float], list[float]]:
+    countries_x = []
+    countries_y = []
+
+    for code in country_data:
+        data = country_data[code]
+        try:
+            x = float(data["data1"])
+            y = float(data["data2"])
+        except (ValueError, TypeError):
+            print(
+                f"Skipping {code}: non-numeric value ({data['data1']!r}, {data['data2']!r})"
+            )
+            continue
+
+        countries_x.append(x)
+        countries_y.append(y)
+
+    return countries_x, countries_y
 
 
-def graph_and_calc_stats_variables():
-    countries_x_float = list(map(float, countries_x))
-    countries_y_float = list(map(float, countries_y))
+def graph_and_calc_stats(
+    countries_x: list[float],
+    countries_y: list[float],
+    title: str,
+    x_title: str,
+    y_title: str,
+) -> dict:
 
-    slope, intercept, r, p, std_err = linregress(countries_x_float, countries_y_float)
+    slope, intercept, r, p, std_err = linregress(countries_x, countries_y)
     r_squared = r**2
 
-    plt.scatter(countries_x_float, countries_y_float)
-    plt.plot(countries_x_float, slope * np.array(countries_x_float) + intercept)
-
-    title = input("Enter graph title: ")
-    x_title = input("Label x-axis (explanatory): ")
-    y_title = input("Label y-axis (response): ")
+    plt.scatter(countries_x, countries_y)
+    plt.plot(countries_x, slope * np.array(countries_x) + intercept)
 
     plt.xlabel(x_title)
     plt.ylabel(y_title)
     plt.title(title)
 
-    plt.savefig("statscsv/output/graph.png")
+    output_path = "statscsv/output/graph.png"
+    plt.savefig(output_path)
+    plt.close()
 
     return dict(
         slope=slope, intercept=intercept, r=r, p=p, std_err=std_err, r2=r_squared
@@ -78,21 +89,42 @@ def graph_and_calc_stats_variables():
 def main():
     year = input("Target Year: ")
 
-    explanatory_variables = askopenfilename()
-    response_variables = askopenfilename()
+    explanatory_path = askopenfilename(title="Select explanatory variable CSV")
+    response_path = askopenfilename(title="Select response variable CSV")
 
-    try:
-        fill_data_set([explanatory_variables, response_variables], year)
-    except Exception as e:
-        print("Error Occured")
-        print(e)
+    if not explanatory_path or not response_path:
+        print("File selection cancelled.")
         return
 
-    purge_unmatched_pairs()
-    stats_values = graph_and_calc_stats_variables()
+    country_data = {}
 
-    print("Sample Size: " + str(len(country_data)))
+    try:
+        fill_data_set([explanatory_path, response_path], year, country_data)
+    except Exception as e:
+        print("Error occured: ", e)
+        return
 
+    purge_unmatched_pairs(country_data)
+
+    if not country_data:
+        print("No matched pairs found in given year.")
+        return
+
+    countries_x, countries_y = build_x_y(country_data)
+
+    if len(countries_x) < 2:
+        print("Not enough valid data points to run regression.")
+        return
+
+    title = input("Enter graph title: ")
+    x_title = input("Label x-axis (explanatory): ")
+    y_title = input("Label y-axis (response): ")
+
+    stats_values = graph_and_calc_stats(
+        countries_x, countries_y, title, x_title, y_title
+    )
+
+    print("Sample Size: " + str(len(countries_x)))
     for key, value in stats_values.items():
         print(key, value)
 
