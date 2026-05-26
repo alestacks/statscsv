@@ -4,7 +4,7 @@ AP Stats project — performs linear regression between two CSV datasets and out
 
 ## CSV Format
 
-All input CSVs must follow this structure:
+Both input CSVs must follow this structure:
 
 ```
 Entity,Code,Year,Value
